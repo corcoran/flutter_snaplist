@@ -34,6 +34,13 @@ class SnipUpdateEvent {
 }
 class SnipFinishEvent {}
 
+class ExplicitPositionChangeEvent {
+  final newPosition;
+  bool animate;
+
+  ExplicitPositionChangeEvent(this.newPosition, this.animate);
+}
+
 class PositionChangeEvent {
   final newPosition;
 

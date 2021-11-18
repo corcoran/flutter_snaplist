@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
+import 'package:infinite_listview/infinite_listview.dart';
 import 'package:snaplist/size_providers.dart';
 import 'package:snaplist/snaplist_bloc.dart';
 import 'package:snaplist/snaplist_controller.dart';
@@ -21,6 +23,9 @@ class SnapList extends StatefulWidget {
   final EdgeInsets padding;
   final Alignment alignment;
   final double swipeVelocity;
+  final double centerOffset;
+
+  final bool infiniteScroll;
 
   final SnaplistController snaplistController;
 
@@ -40,6 +45,8 @@ class SnapList extends StatefulWidget {
     this.alignment = Alignment.center,
     this.swipeVelocity = 0.0,
     this.snaplistController,
+    this.centerOffset = 0,
+    this.infiniteScroll = false,
   }) : super(key: key) {
     assert(this.sizeProvider != null);
     assert(this.builder != null);
@@ -53,7 +60,7 @@ class SnapList extends StatefulWidget {
 
 class _SnapListState extends State<SnapList> with TickerProviderStateMixin {
   GlobalKey _listKey = GlobalKey();
-  ScrollController _controller = ScrollController();
+  var _controller;
 
   SnapListBloc bloc;
 
@@ -63,12 +70,16 @@ class _SnapListState extends State<SnapList> with TickerProviderStateMixin {
 
   @override
   void initState() {
+    _controller =
+        widget.infiniteScroll ? InfiniteScrollController() : ScrollController();
     bloc = SnapListBloc(
       itemsCount: widget.count,
       sizeProvider: widget.sizeProvider,
       axis: widget.axis,
       separatorProvider: widget.separatorProvider,
-      swipeVelocity: widget.swipeVelocity
+      swipeVelocity: widget.swipeVelocity,
+      centerOffset: widget.centerOffset,
+      infiniteScroll: widget.infiniteScroll,
     );
 
     bloc.offsetStream.listen((event) {
@@ -87,9 +98,13 @@ class _SnapListState extends State<SnapList> with TickerProviderStateMixin {
       _snipController.forward(from: 0.0);
     });
 
-    bloc.explicitPositionChangeStream.listen((offset) {
-      print("new offset: $offset");
-      _controller.jumpTo(offset);
+    bloc.explicitPositionChangeStream.listen((event) {
+      if (event.animate) {
+        _controller.animateTo(event.newPosition,
+            curve: Curves.easeIn, duration: Duration(milliseconds: 150));
+      } else {
+        _controller.jumpTo(event.newPosition);
+      }
     });
 
     _snipController = AnimationController(
@@ -98,7 +113,8 @@ class _SnapListState extends State<SnapList> with TickerProviderStateMixin {
       ..addListener(() {
         Animation resultAnimation = _snipController;
         if (widget.snipCurve != null) {
-          resultAnimation =              CurvedAnimation(parent: _snipController, curve: widget.snipCurve);
+          resultAnimation =
+              CurvedAnimation(parent: _snipController, curve: widget.snipCurve);
         }
         final scrollProgress = _progressTween.evaluate(resultAnimation);
         final snip = _snipTween.evaluate(resultAnimation);
@@ -110,12 +126,14 @@ class _SnapListState extends State<SnapList> with TickerProviderStateMixin {
         }
       });
 
-    widget.snaplistController?.positionChanged = (position) {
-      bloc.explicitPositionChangeSink.add(position);
+    widget.snaplistController?.positionChanged = (position, animate) {
+      bloc.explicitPositionChangeSink
+          .add(ExplicitPositionChangeEvent(position, animate));
     };
 
     if (widget.snaplistController?.initialPosition != null) {
-      bloc.explicitPositionChangeSink.add(widget.snaplistController.initialPosition);
+      bloc.explicitPositionChangeSink.add(ExplicitPositionChangeEvent(
+          widget.snaplistController.initialPosition, false));
     }
 
     super.initState();
@@ -145,10 +163,13 @@ class _SnapListState extends State<SnapList> with TickerProviderStateMixin {
       axis: widget.axis,
       separatorProvider: widget.separatorProvider,
       swipeVelocity: widget.swipeVelocity,
+      centerOffset: widget.centerOffset,
+      infiniteScroll: widget.infiniteScroll,
     );
 
-    widget.snaplistController?.positionChanged = (position) {
-      bloc.explicitPositionChangeSink.add(position);
+    widget.snaplistController?.positionChanged = (position, animate) {
+      bloc.explicitPositionChangeSink
+          .add(ExplicitPositionChangeEvent(position, animate));
     };
   }
 
@@ -182,9 +203,80 @@ class _SnapListState extends State<SnapList> with TickerProviderStateMixin {
     );
   }
 
+  _separated({
+    Key key,
+    Axis scrollDirection = Axis.vertical,
+    bool reverse = false,
+    dynamic controller,
+    bool primary,
+    ScrollPhysics physics,
+    bool shrinkWrap = false,
+    EdgeInsetsGeometry padding,
+    @required IndexedWidgetBuilder itemBuilder,
+    @required IndexedWidgetBuilder separatorBuilder,
+    @required int itemCount,
+    bool addAutomaticKeepAlives = true,
+    bool addRepaintBoundaries = true,
+    bool addSemanticIndexes = true,
+    double cacheExtent,
+    double anchor = 0.0,
+    DragStartBehavior dragStartBehavior = DragStartBehavior.start,
+    ScrollViewKeyboardDismissBehavior keyboardDismissBehavior =
+        ScrollViewKeyboardDismissBehavior.manual,
+    String restorationId,
+    Clip clipBehavior = Clip.hardEdge,
+    bool infiniteScroll,
+  }) {
+    if (infiniteScroll) {
+      return InfiniteListView.separated(
+        key: key,
+        scrollDirection: scrollDirection,
+        reverse: reverse,
+        controller: controller as InfiniteScrollController,
+        physics: physics,
+        padding: padding,
+        itemBuilder: itemBuilder,
+        separatorBuilder: separatorBuilder,
+        itemCount: itemCount,
+        addAutomaticKeepAlives: addAutomaticKeepAlives,
+        addRepaintBoundaries: addRepaintBoundaries,
+        addSemanticIndexes: addSemanticIndexes,
+        cacheExtent: cacheExtent,
+        anchor: anchor,
+        dragStartBehavior: dragStartBehavior,
+        keyboardDismissBehavior: keyboardDismissBehavior,
+        restorationId: restorationId,
+        clipBehavior: clipBehavior,
+      );
+    } else {
+      return ListView.separated(
+        key: key,
+        scrollDirection: scrollDirection,
+        reverse: reverse,
+        controller: controller as ScrollController,
+        physics: physics,
+        padding: padding,
+        itemBuilder: itemBuilder,
+        separatorBuilder: separatorBuilder,
+        itemCount: itemCount,
+        addAutomaticKeepAlives: addAutomaticKeepAlives,
+        addRepaintBoundaries: addRepaintBoundaries,
+        addSemanticIndexes: addSemanticIndexes,
+        cacheExtent: cacheExtent,
+        dragStartBehavior: dragStartBehavior,
+        keyboardDismissBehavior: keyboardDismissBehavior,
+        restorationId: restorationId,
+        clipBehavior: clipBehavior,
+        shrinkWrap: shrinkWrap,
+        primary: primary,
+      );
+    }
+  }
+
   _buildList(int center, int next, double progress) {
-    return ListView.separated(
+    return _separated(
         key: _listKey,
+        infiniteScroll: widget.infiniteScroll,
         padding: widget.padding,
         scrollDirection: widget.axis,
         physics: NeverScrollableScrollPhysics(),

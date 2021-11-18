@@ -8,11 +8,11 @@ class SnaplistController {
     this.initialPosition
   });
 
-  setPosition(int position) {
+  setPosition(int position, {bool animate = false}) {
     if (positionChanged != null) {
-      positionChanged(position);
+      positionChanged(position, animate);
     }
   }
 }
 
-typedef PositionChanged(int position);
+typedef PositionChanged(int position, bool animate);

@@ -14,10 +14,13 @@ class SnapListBloc {
   int _centerItemPosition = 0;
   int _nextItemPosition = -1;
 
+  double _centerOffset = 0.0;
   double _scrollOffset;
   double _startPosition;
 
   double _scrollProgress;
+
+  bool _infiniteScroll;
 
   ScrollDirection _direction = ScrollDirection.NONE;
   bool get _isVertical => _axis == Axis.vertical;
@@ -45,12 +48,12 @@ class SnapListBloc {
   Stream<PositionChangeEvent> get positionStream =>
       _positionChangeController.stream;
 
-  StreamController<int> _explicitPositionChangeController = StreamController();
-  Sink<int> get explicitPositionChangeSink =>
+  StreamController<ExplicitPositionChangeEvent> _explicitPositionChangeController = StreamController();
+  Sink<ExplicitPositionChangeEvent> get explicitPositionChangeSink =>
       _explicitPositionChangeController.sink;
 
-  StreamController<double> _explicitPositionChangeStream = StreamController();
-  Stream<double> get explicitPositionChangeStream =>
+  StreamController<ExplicitPositionChangeEvent> _explicitPositionChangeStream = StreamController();
+  Stream<ExplicitPositionChangeEvent> get explicitPositionChangeStream =>
       _explicitPositionChangeStream.stream;
 
   StreamController<OffsetEvent> _offsetController = StreamController();
@@ -62,14 +65,23 @@ class SnapListBloc {
   StreamController<UiEvent> _uiController = StreamController();
   Stream<UiEvent> get uiStream => _uiController.stream;
 
-  SnapListBloc(
-      {int itemsCount, sizeProvider, separatorProvider, axis, swipeVelocity}) {
+  SnapListBloc({
+    int itemsCount,
+    sizeProvider,
+    separatorProvider,
+    axis,
+    swipeVelocity,
+    centerOffset,
+    infiniteScroll,
+  }) {
     initializeField(
       itemsCount: itemsCount,
       sizeProvider: sizeProvider,
       axis: axis,
       separatorProvider: separatorProvider,
       swipeVelocity: swipeVelocity,
+      centerOffset: centerOffset,
+      infiniteScroll: infiniteScroll,
     );
 
     _swipeStartController.stream.listen((event) {
@@ -90,7 +102,9 @@ class SnapListBloc {
         _nextItemPosition = _centerItemPosition - 1;
       }
 
-      if (_nextItemPosition < 0 || _nextItemPosition >= _itemsCount) {
+      if (!_infiniteScroll &&
+          (_nextItemPosition < -itemsCount * -1 ||
+              _nextItemPosition >= _itemsCount)) {
         return;
       }
 
@@ -113,9 +127,7 @@ class SnapListBloc {
         _direction = ScrollDirection.NONE;
       }
 
-      if (_direction != null &&
-          _nextItemPosition >= 0 &&
-          _nextItemPosition < _itemsCount) {
+      if (_shouldSnipStart()) {
         _snipStartController.add(SnipStartEvent(
             _scrollOffset, _calculateTargetOffset(), _scrollProgress));
       }
@@ -132,18 +144,18 @@ class SnapListBloc {
     });
 
     _snipFinishController.stream.listen((event) {
-      _centerItemPosition = _nextItemPosition.clamp(0, _itemsCount - 1);
+      _centerItemPosition = _calculatePosition(_nextItemPosition);
       _nextItemPosition = -1;
       _scrollProgress = 0.0;
 
       _positionChangeController.add(PositionChangeEvent(_centerItemPosition));
     });
 
-    _explicitPositionChangeController.stream.listen((position) {
-      _nextItemPosition = position.clamp(0, _itemsCount - 1);
+    _explicitPositionChangeController.stream.listen((event) {
+      _nextItemPosition = _calculatePosition(event.newPosition);
       _scrollProgress = 0.0;
 
-      _explicitPositionChangeStream.add(_calculateTargetOffset());
+      _explicitPositionChangeStream.add(ExplicitPositionChangeEvent(_calculateTargetOffset(), event.animate));
 
       _centerItemPosition = _nextItemPosition;
       _nextItemPosition = -1;
@@ -159,13 +171,36 @@ class SnapListBloc {
     });
   }
 
-  initializeField(
-      {itemsCount, sizeProvider, separatorProvider, axis, swipeVelocity}) {
+  initializeField({
+    itemsCount,
+    sizeProvider,
+    separatorProvider,
+    axis,
+    swipeVelocity,
+    centerOffset,
+    infiniteScroll,
+  }) {
     _itemsCount = itemsCount ?? 0;
     _sizeProvider = sizeProvider;
     _separatorProvider = separatorProvider;
     _axis = axis;
     _swipeVelocity = swipeVelocity;
+    _centerOffset = centerOffset;
+    _infiniteScroll = infiniteScroll;
+  }
+
+  _calculatePosition(int position) {
+    if (_infiniteScroll) return position;
+    return position.clamp(0, _itemsCount - 1);
+  }
+
+  _shouldSnipStart() {
+    if (_infiniteScroll) {
+      return _direction != null;
+    }
+    return _direction != null &&
+        _nextItemPosition >= 0 &&
+        _nextItemPosition < _itemsCount;
   }
 
   _swipeNextAndCenter() {
@@ -183,7 +218,13 @@ class SnapListBloc {
 
   double _calculateTargetOffset() {
     return calculateTargetOffset(
-      _centerItemPosition, _nextItemPosition, _isVertical, _sizeProvider, _separatorProvider, _createBuilderData());
+        _centerItemPosition,
+        _nextItemPosition,
+        _isVertical,
+        _sizeProvider,
+        _separatorProvider,
+        _centerOffset,
+        _createBuilderData());
   }
 
   _createBuilderData() {
@@ -222,10 +263,12 @@ double calculateTargetOffset(
     bool isVertical,
     CardSizeProvider sizeProvider,
     SeparatorSizeProvider separatorSizeProvider,
+    double centerOffset,
     BuilderData builderData) {
   double result = 0.0;
 
-  for (var i = 1; i <= calculateTo; ++i) {
+  _calculateEach(var i) {
+    double _result = 0.0;
     Size cardSize = sizeProvider(
         i - 1,
         BuilderData(
@@ -236,14 +279,26 @@ double calculateTargetOffset(
     Size separatorSize = separatorSizeProvider(i - 1, builderData);
 
     if (isVertical) {
-      result += cardSize.height;
-      result += separatorSize.height;
+      _result += cardSize.height;
+      _result += separatorSize.height;
     } else {
-      result += cardSize.width;
-      result += separatorSize.width;
+      _result += cardSize.width;
+      _result += separatorSize.width;
+    }
+    return _result;
+  }
+
+  if (calculateTo < 0) {
+    for (var i = 0; i > calculateTo; --i) {
+      result += _calculateEach(i);
+    }
+    result = result * -1;
+  } else {
+    for (var i = 1; i <= calculateTo; ++i) {
+      result += _calculateEach(i);
     }
   }
-  return result;
+  return result - centerOffset;
 }
 
 enum ScrollDirection { RIGHT, NONE, LEFT, UP, DOWN }
