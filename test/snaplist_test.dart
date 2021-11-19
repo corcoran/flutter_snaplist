@@ -12,16 +12,21 @@ void main() {
         itemsCount: 10,
         separatorProvider: (index, data) => Size(10.0, 10.0),
         sizeProvider: (index, data) => Size(50.0, 50.0),
-        swipeVelocity: 0.0);
+        swipeVelocity: 0.0,
+        centerOffset: 0.0,
+        infiniteScroll: true);
 
-    expect(bloc.offsetStream,
-        emits(OffsetMatcher(OffsetEvent(-10.0, 40.0, 0, 1))));
+    bloc.offsetStream.listen(expectAsync1(
+        (event) => expect(event, OffsetMatcher(OffsetEvent(-10.0, 40.0, 0, 1))),
+        count: 1));
 
-    expect(bloc.snipStartStream,
-        emits(SnipStartMatcher(SnipStartEvent(-10.0, 60.0, 40.0))));
+    bloc.snipStartStream.listen(expectAsync1(
+        (event) => expect(event, SnipStartMatcher(SnipStartEvent(-10.0, 60.0, 40.0))),
+        count: 1));
 
-    expect(bloc.positionStream,
-        emits(PositionChangeMatcher(PositionChangeEvent(1))));
+    bloc.positionStream.listen(expectAsync1(
+        (event) => expect(event, PositionChangeMatcher(PositionChangeEvent(1))),
+        count: 1));
 
     bloc.swipeStartSink.add(StartEvent(0.0, 50.0));
     bloc.swipeUpdateSink.add(UpdateEvent(30.0, 10.0));
@@ -35,10 +40,12 @@ void main() {
         itemsCount: 10,
         separatorProvider: (index, data) => Size(10.0, 10.0),
         sizeProvider: (index, data) => Size(50.0, 50.0),
-        swipeVelocity: 0.0);
+        swipeVelocity: 0.0,
+        centerOffset: 0.0,
+        infiniteScroll: false);
 
-    expect(bloc.explicitPositionChangeStream, emits(180));
-
-    bloc.explicitPositionChangeSink.add(3);
+    bloc.explicitPositionChangeStream.listen(
+        expectAsync1((event) => expect(event.newPosition, 180), count: 1));
+    bloc.explicitPositionChangeSink.add(ExplicitPositionChangeEvent(3, false));
   });
 }
