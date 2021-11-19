@@ -1,8 +1,8 @@
 class SnaplistController {
 
-  final int initialPosition;
+  final int? initialPosition;
 
-  PositionChanged positionChanged;
+  PositionChanged? positionChanged;
 
   SnaplistController({
     this.initialPosition
@@ -10,7 +10,7 @@ class SnaplistController {
 
   setPosition(int position, {bool animate = false}) {
     if (positionChanged != null) {
-      positionChanged(position, animate);
+      positionChanged!(position, animate);
     }
   }
 }

@@ -5,22 +5,22 @@ import 'package:snaplist/size_providers.dart';
 import 'package:snaplist/snaplist_events.dart';
 
 class SnapListBloc {
-  int _itemsCount;
-  CardSizeProvider _sizeProvider;
-  SeparatorSizeProvider _separatorProvider;
-  double _swipeVelocity;
-  Axis _axis;
+  late int _itemsCount;
+  late CardSizeProvider _sizeProvider;
+  late SeparatorSizeProvider _separatorProvider;
+  late double _swipeVelocity;
+  late Axis _axis;
 
   int _centerItemPosition = 0;
   int _nextItemPosition = -1;
 
   double _centerOffset = 0.0;
-  double _scrollOffset;
-  double _startPosition;
+  late double _scrollOffset;
+  late double _startPosition;
 
-  double _scrollProgress;
+  late double _scrollProgress;
 
-  bool _infiniteScroll;
+  late bool _infiniteScroll;
 
   ScrollDirection _direction = ScrollDirection.NONE;
   bool get _isVertical => _axis == Axis.vertical;
@@ -66,13 +66,13 @@ class SnapListBloc {
   Stream<UiEvent> get uiStream => _uiController.stream;
 
   SnapListBloc({
-    int itemsCount,
+    int itemsCount = 0,
     sizeProvider,
     separatorProvider,
-    axis,
+    axis = Axis.vertical,
     swipeVelocity,
     centerOffset,
-    infiniteScroll,
+    infiniteScroll = false,
   }) {
     initializeField(
       itemsCount: itemsCount,
@@ -164,7 +164,7 @@ class SnapListBloc {
     _itemCountController.stream.listen((itemCount) {
       _itemsCount = itemCount;
 
-      if (_centerItemPosition >= _itemsCount - 1) {
+      if (!infiniteScroll && _centerItemPosition >= _itemsCount - 1) {
         _centerItemPosition = _itemsCount - 1;
         _positionChangeController.add(PositionChangeEvent(_centerItemPosition));
       }
@@ -180,7 +180,7 @@ class SnapListBloc {
     centerOffset,
     infiniteScroll,
   }) {
-    _itemsCount = itemsCount ?? 0;
+    _itemsCount = itemsCount;
     _sizeProvider = sizeProvider;
     _separatorProvider = separatorProvider;
     _axis = axis;
@@ -196,9 +196,9 @@ class SnapListBloc {
 
   _shouldSnipStart() {
     if (_infiniteScroll) {
-      return _direction != null;
+      return _direction != ScrollDirection.NONE;
     }
-    return _direction != null &&
+    return _direction != ScrollDirection.NONE &&
         _nextItemPosition >= 0 &&
         _nextItemPosition < _itemsCount;
   }
@@ -261,22 +261,22 @@ double calculateTargetOffset(
     int currentItem,
     int calculateTo,
     bool isVertical,
-    CardSizeProvider sizeProvider,
-    SeparatorSizeProvider separatorSizeProvider,
+    CardSizeProvider? sizeProvider,
+    SeparatorSizeProvider? separatorSizeProvider,
     double centerOffset,
     BuilderData builderData) {
   double result = 0.0;
 
   _calculateEach(var i) {
     double _result = 0.0;
-    Size cardSize = sizeProvider(
+    Size cardSize = sizeProvider!(
         i - 1,
         BuilderData(
           currentItem,
           calculateTo,
           100.0,
         ));
-    Size separatorSize = separatorSizeProvider(i - 1, builderData);
+    Size separatorSize = separatorSizeProvider!(i - 1, builderData);
 
     if (isVertical) {
       _result += cardSize.height;
